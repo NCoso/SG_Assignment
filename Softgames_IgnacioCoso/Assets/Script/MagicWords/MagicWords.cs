@@ -7,11 +7,12 @@ using System.Linq;
 using UnityEngine.Networking;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using DG.Tweening;
 
 public class MagicWords : MonoBehaviour
 {
     [SerializeField] 
-    private MagicWordsEmojiFetcher m_emojiFetcher; //emoji cache - updates TMPro Atlas with emojis
+    private MagicWordsEmojiFetcher m_emojiFetcher; //updates TMPro Atlas with emojis
     private DynamicSpritesCache m_dynamicSpritesCache => DynamicSpritesCache.GetInstance(cached: true); // avatar cache
     
     private DialogueData m_data;
@@ -65,7 +66,7 @@ public class MagicWords : MonoBehaviour
         m_data = _data;
         m_data.InitializeDictionaries();
         
-        // Download & Cache avatars and emojis if not cached
+        // Download avatars (if not cached) and emojis
         await m_dynamicSpritesCache.DownloadAllSpritesAsync(m_data.avatars.Select(a => a.url));
         await m_emojiFetcher.DownloadAllEmojis(m_data.emojies);
         
@@ -82,15 +83,19 @@ public class MagicWords : MonoBehaviour
 
         m_LoadingBlocker.SetActive(false);
         dialogueText.text = string.Empty;
-
+    
+        Sequence masterSequence = DOTween.Sequence();
+    
         foreach (var line in m_data.dialogue)
         {
-            // Format: "[name]: [sentence]"
             string processedText = $"{line.name}: {ProcessEmojis(line.text)}";
-            UpdateAvatarDisplay(line.name);
-            await TypeText(processedText);
-            await Task.Delay(2000);
+        
+            masterSequence.AppendCallback(() => UpdateAvatarDisplay(line.name));
+            masterSequence.Append(TypeTextWithTween(processedText));
+            masterSequence.AppendInterval(2f); // Delay between lines
         }
+    
+        masterSequence.Play();
     }
 
     private void UpdateAvatarDisplay(string speakerName)
@@ -131,51 +136,58 @@ public class MagicWords : MonoBehaviour
         });
     }
 
-    private async Task TypeText(string text)
+    private Sequence TypeTextWithTween(string fullText)
     {
         dialogueText.text = string.Empty;
+        Sequence sequence = DOTween.Sequence();
         int i = 0;
     
-        while (i < text.Length)
+        while (i < fullText.Length)
         {
-            // Check for sprite tag opening
-            if (text[i] == '<' && text.Substring(i).StartsWith("<sprite"))
+            // Handle sprite tags
+            if (fullText[i] == '<' && fullText.Substring(i).StartsWith("<sprite"))
             {
-                int endIndex = text.IndexOf('>', i);
+                int endIndex = fullText.IndexOf('>', i);
                 if (endIndex > i)
                 {
-                    // Extract and add complete sprite tag
-                    string spriteTag = text.Substring(i, endIndex - i + 1);
-                    dialogueText.text += spriteTag;
-                    i = endIndex + 1;
+                    string spriteTag = fullText.Substring(i, endIndex - i + 1);
+                    int captureI = i; // Capture current i for closure
                 
-                    // Pause for emoji display
-                    await Task.Delay(50);
+                    sequence.AppendCallback(() => {
+                        dialogueText.text += spriteTag;
+                    });
+                
+                    sequence.AppendInterval(0.05f); // Emoji display delay
+                    i = endIndex + 1;
                     continue;
                 }
             }
         
-            // Handle normal characters and rich text tags
-            dialogueText.text += text[i];
-            i++;
-        
-            // Skip typing delay for rich text tags
-            if (text[i-1] == '<')
+            // Handle rich text tags
+            if (fullText[i] == '<')
             {
-                // Fast-forward through the entire tag
-                int tagEnd = text.IndexOf('>', i-1);
-                if (tagEnd > i-1)
+                int tagEnd = fullText.IndexOf('>', i);
+                if (tagEnd > i)
                 {
-                    string tagContent = text.Substring(i, tagEnd - i);
-                    dialogueText.text += tagContent + ">";
+                    string fullTag = fullText.Substring(i, tagEnd - i + 1);
+                    sequence.AppendCallback(() => {
+                        dialogueText.text += fullTag;
+                    });
                     i = tagEnd + 1;
+                    continue;
                 }
             }
-            else
-            {
-                await Task.Delay(50);
-            }
+        
+            // Normal characters
+            char currentChar = fullText[i];
+            sequence.AppendCallback(() => {
+                dialogueText.text += currentChar;
+            });
+            sequence.AppendInterval(0.05f); // Typing speed delay
+            i++;
         }
+    
+        return sequence;
     }
     
     

@@ -1,35 +1,21 @@
 using UnityEngine;
 using TMPro;
-using UnityEngine.UI;
 using System.Collections.Generic;
 using UnityEngine.Networking;
 using System.Threading.Tasks;
-using System.Text.RegularExpressions;
-using UnityEngine.Serialization;
 using UnityEngine.TextCore;
 
 public class MagicWordsEmojiFetcher : MonoBehaviour
 {
-    private const string s_EMOJI_NAMES_KEY = "SavedEmojis";
-    private const string s_RESERVED_SPACES_KEY = "ReservedSpaces";
-    
     [SerializeField] 
     private TMP_SpriteAsset m_DynamicSpriteAsset; //TMPro Sprite Atlas
 
 
-    private int UsedSpaces
-    {
-        get => PlayerPrefs.GetInt(s_RESERVED_SPACES_KEY, 0);
-        set => PlayerPrefs.SetInt(s_RESERVED_SPACES_KEY, value);
-    }
-    private string SavedEmojis
-    {
-        get => PlayerPrefs.GetString(s_EMOJI_NAMES_KEY, "");
-        set => PlayerPrefs.SetString(s_EMOJI_NAMES_KEY, value);
-    }
+    private static int s_usedSpaces = 0;
+    private static List<string> s_savedEmojis = new List<string>();
 
-    public bool IsEmojiAlreadyFetched(string emojiName) => SavedEmojis.Contains(emojiName);
-    private void EmojiSaved(string emojiName) => SavedEmojis = $"{SavedEmojis},{emojiName}";
+    public bool IsEmojiAlreadyFetched(string emojiName) => s_savedEmojis.Contains(emojiName);
+    private void EmojiSaved(string emojiName) => s_savedEmojis.Add(emojiName);
     
     
     public async Task DownloadAllEmojis(List<EmojiData> _data)
@@ -55,20 +41,28 @@ public class MagicWordsEmojiFetcher : MonoBehaviour
         Debug.Log($"DownloadEmojiTexture: {url}");
         using (UnityWebRequest webRequest = UnityWebRequestTexture.GetTexture(url))
         {
-            await webRequest.SendWebRequest();
-            return webRequest.result == UnityWebRequest.Result.Success ? 
-                DownloadHandlerTexture.GetContent(webRequest) : null;
+            try
+            {
+                await webRequest.SendWebRequest();
+                return webRequest.result == UnityWebRequest.Result.Success
+                    ? DownloadHandlerTexture.GetContent(webRequest)
+                    : null;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
     
     private Rect ReserveEmptySpace(Texture2D texture, int width, int height)
     {
-        int x = UsedSpaces * width % texture.width;
-        int y = UsedSpaces * width / texture.width;
+        int x = s_usedSpaces * width % texture.width;
+        int y = s_usedSpaces * width / texture.width;
         Rect emptySpace = new Rect(x, y, width, height);
         
         //Debug.Log($"Reserved empty space: {emptySpace}");
-        UsedSpaces += 1;
+        s_usedSpaces += 1;
         return emptySpace;
     }
     
