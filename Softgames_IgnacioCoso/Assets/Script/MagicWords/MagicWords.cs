@@ -138,7 +138,6 @@ public class MagicWords : MonoBehaviour
 
     private Sequence TypeTextWithTween(string fullText)
     {
-        dialogueText.text = string.Empty;
         Sequence sequence = DOTween.Sequence();
         int i = 0;
     
@@ -186,6 +185,8 @@ public class MagicWords : MonoBehaviour
             sequence.AppendInterval(0.05f); // Typing speed delay
             i++;
         }
+
+        sequence.OnStart(() => { dialogueText.text = string.Empty; });
     
         return sequence;
     }
